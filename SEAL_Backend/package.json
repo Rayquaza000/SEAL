@@ -1,0 +1,12 @@
+{
+  "name": "seal_backend",
+  "version": "1.0.0",
+  "description": "Backend of SEAL webapp",
+  "license": "ISC",
+  "author": "Pratik Mehta",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
