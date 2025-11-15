@@ -4,7 +4,8 @@ import viteLogo from '/vite.svg'
 import { createBrowserRouter } from 'react-router-dom'
 import './App.css'
 import { Outlet } from 'react-router-dom';
-import Authentication from './components/Authentication'
+import Authentication from './components/Authentication';
+import Header from './components/Header';
 
 
 function App() {
