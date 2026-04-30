@@ -1,5 +1,4 @@
 const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer');
 require('dotenv').config();
 
@@ -9,26 +8,40 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const productImageStorage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: 'seal/products',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-    transformation: [{ width: 1200, height: 900, crop: 'limit', quality: 'auto' }],
+// Use memory storage — we upload the buffer manually to Cloudinary
+const storage = multer.memoryStorage();
+
+const uploadProductImage = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only image files are allowed'), false);
   },
 });
 
-const avatarStorage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: 'seal/avatars',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-    transformation: [{ width: 200, height: 200, crop: 'fill', gravity: 'face' }],
+const uploadAvatar = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only image files are allowed'), false);
   },
 });
 
-const uploadProductImage = multer({ storage: productImageStorage });
-const uploadAvatar = multer({ storage: avatarStorage });
+// Upload a buffer to Cloudinary and return { url, public_id }
+const uploadBuffer = (buffer, folder, options = {}) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder, ...options },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve({ url: result.secure_url, public_id: result.public_id });
+      }
+    );
+    stream.end(buffer);
+  });
+};
 
 const deleteImage = async (publicId) => {
   if (!publicId) return;
@@ -39,4 +52,4 @@ const deleteImage = async (publicId) => {
   }
 };
 
-module.exports = { cloudinary, uploadProductImage, uploadAvatar, deleteImage };
+module.exports = { cloudinary, uploadProductImage, uploadAvatar, uploadBuffer, deleteImage };

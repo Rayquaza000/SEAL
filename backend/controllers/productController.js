@@ -1,5 +1,5 @@
 const { query, getClient } = require('../config/db');
-const { deleteImage } = require('../config/cloudinary');
+const { deleteImage, uploadBuffer } = require('../config/cloudinary');
 
 // GET /api/workspaces/:workspaceId/products
 const getProducts = async (req, res) => {
@@ -26,7 +26,6 @@ const getProducts = async (req, res) => {
     const params = [workspaceId];
     let idx = 2;
 
-    // Employees only see products/stages assigned to them
     if (!isOwner) {
       baseQuery += ` AND (p.assigned_to = $${idx} OR EXISTS (
         SELECT 1 FROM product_stages WHERE product_id = p.id AND assigned_to = $${idx}
@@ -77,7 +76,7 @@ const getProduct = async (req, res) => {
     if (product.rows.length === 0) return res.status(404).json({ message: 'Product not found' });
 
     const stages = await query(
-      `SELECT ps.*, u.name AS assigned_to_name 
+      `SELECT ps.*, u.name AS assigned_to_name
        FROM product_stages ps LEFT JOIN users u ON u.id = ps.assigned_to
        WHERE ps.product_id = $1 ORDER BY ps.stage_order`,
       [productId]
@@ -113,22 +112,40 @@ const createProduct = async (req, res) => {
     const count = await query('SELECT COUNT(*) FROM products WHERE workspace_id = $1', [workspaceId]);
     const productCode = `#${String(parseInt(count.rows[0].count) + 101).padStart(3, '0')}`;
 
-    const conceptImageUrl = req.files?.conceptImage?.[0]?.path || null;
-    const conceptImagePublicId = req.files?.conceptImage?.[0]?.filename || null;
+    // Upload concept image to Cloudinary if provided
+    let conceptImageUrl = null;
+    let conceptImagePublicId = null;
+    if (req.files?.conceptImage?.[0]?.buffer) {
+      const uploaded = await uploadBuffer(
+        req.files.conceptImage[0].buffer,
+        'seal/products',
+        { transformation: [{ width: 1200, height: 900, crop: 'limit', quality: 'auto' }] }
+      );
+      conceptImageUrl = uploaded.url;
+      conceptImagePublicId = uploaded.public_id;
+    }
 
     await client.query('BEGIN');
 
     const product = await client.query(
-      `INSERT INTO products (workspace_id, product_code, name, client, concept_image_url, 
+      `INSERT INTO products (workspace_id, product_code, name, client, concept_image_url,
         concept_image_public_id, assigned_to, notes)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [workspaceId, productCode, name.trim(), clientName || null, conceptImageUrl,
-       conceptImagePublicId, assignedTo || null, notes || null]
+      [
+        workspaceId,
+        productCode,
+        name.trim(),
+        clientName || null,
+        conceptImageUrl,
+        conceptImagePublicId,
+        assignedTo || null,
+        notes || null,
+      ]
     );
 
     const productId = product.rows[0].id;
 
-    // If template provided, load its stages
+    // If template provided and no manual stages, load template stages
     let stageList = stagesArr;
     if (templateId && stageList.length === 0) {
       const tmplStages = await client.query(
@@ -147,14 +164,13 @@ const createProduct = async (req, res) => {
       );
     }
 
-    // Insert materials
+    // Insert materials and deduct from inventory
     for (const mat of materialsArr) {
       if (mat.inventoryId && mat.quantity) {
         await client.query(
           'INSERT INTO product_materials (product_id, inventory_id, quantity) VALUES ($1, $2, $3)',
           [productId, mat.inventoryId, mat.quantity]
         );
-        // Deduct from inventory
         await client.query(
           'UPDATE inventory SET quantity = quantity - $1, updated_at = NOW() WHERE id = $2',
           [mat.quantity, mat.inventoryId]
@@ -165,7 +181,7 @@ const createProduct = async (req, res) => {
     await client.query('COMMIT');
 
     const fullProduct = await query(
-      `SELECT p.*, u.name AS assigned_to_name FROM products p 
+      `SELECT p.*, u.name AS assigned_to_name FROM products p
        LEFT JOIN users u ON u.id = p.assigned_to WHERE p.id = $1`,
       [productId]
     );
@@ -190,26 +206,49 @@ const updateProduct = async (req, res) => {
     const { productId } = req.params;
     const { name, client: clientName, assignedTo, notes } = req.body;
 
-    const buildImageUrl = req.files?.buildImage?.[0]?.path || null;
-    const buildImagePublicId = req.files?.buildImage?.[0]?.filename || null;
-    const conceptImageUrl = req.files?.conceptImage?.[0]?.path || null;
-    const conceptImagePublicId = req.files?.conceptImage?.[0]?.filename || null;
+    // Upload new build image if provided
+    let buildImageUrl = null;
+    let buildImagePublicId = null;
+    if (req.files?.buildImage?.[0]?.buffer) {
+      const uploaded = await uploadBuffer(
+        req.files.buildImage[0].buffer,
+        'seal/products',
+        { transformation: [{ width: 1200, height: 900, crop: 'limit', quality: 'auto' }] }
+      );
+      buildImageUrl = uploaded.url;
+      buildImagePublicId = uploaded.public_id;
+    }
 
-    let setClauses = [];
-    let params = [];
+    // Upload new concept image if provided
+    let conceptImageUrl = null;
+    let conceptImagePublicId = null;
+    if (req.files?.conceptImage?.[0]?.buffer) {
+      const uploaded = await uploadBuffer(
+        req.files.conceptImage[0].buffer,
+        'seal/products',
+        { transformation: [{ width: 1200, height: 900, crop: 'limit', quality: 'auto' }] }
+      );
+      conceptImageUrl = uploaded.url;
+      conceptImagePublicId = uploaded.public_id;
+    }
+
+    const setClauses = [];
+    const params = [];
     let idx = 1;
 
-    if (name) { setClauses.push(`name = $${idx++}`); params.push(name); }
-    if (clientName !== undefined) { setClauses.push(`client = $${idx++}`); params.push(clientName); }
-    if (assignedTo !== undefined) { setClauses.push(`assigned_to = $${idx++}`); params.push(assignedTo || null); }
-    if (notes !== undefined) { setClauses.push(`notes = $${idx++}`); params.push(notes); }
+    if (name)                     { setClauses.push(`name = $${idx++}`);         params.push(name); }
+    if (clientName !== undefined)  { setClauses.push(`client = $${idx++}`);       params.push(clientName || null); }
+    if (assignedTo !== undefined)  { setClauses.push(`assigned_to = $${idx++}`);  params.push(assignedTo || null); }
+    if (notes !== undefined)       { setClauses.push(`notes = $${idx++}`);        params.push(notes); }
+
     if (buildImageUrl) {
-      setClauses.push(`build_image_url = $${idx++}`); params.push(buildImageUrl);
-      setClauses.push(`build_image_public_id = $${idx++}`); params.push(buildImagePublicId);
+      setClauses.push(`build_image_url = $${idx++}`);        params.push(buildImageUrl);
+      setClauses.push(`build_image_public_id = $${idx++}`);  params.push(buildImagePublicId);
     }
+
     if (conceptImageUrl) {
-      setClauses.push(`concept_image_url = $${idx++}`); params.push(conceptImageUrl);
-      setClauses.push(`concept_image_public_id = $${idx++}`); params.push(conceptImagePublicId);
+      setClauses.push(`concept_image_url = $${idx++}`);        params.push(conceptImageUrl);
+      setClauses.push(`concept_image_public_id = $${idx++}`);  params.push(conceptImagePublicId);
     }
 
     if (setClauses.length === 0) return res.status(400).json({ message: 'Nothing to update' });
@@ -232,12 +271,16 @@ const deleteProduct = async (req, res) => {
   try {
     const { productId } = req.params;
     const product = await query('SELECT * FROM products WHERE id = $1', [productId]);
-    if (product.rows[0]?.concept_image_public_id) {
+
+    if (product.rows.length === 0) return res.status(404).json({ message: 'Product not found' });
+
+    if (product.rows[0].concept_image_public_id) {
       await deleteImage(product.rows[0].concept_image_public_id);
     }
-    if (product.rows[0]?.build_image_public_id) {
+    if (product.rows[0].build_image_public_id) {
       await deleteImage(product.rows[0].build_image_public_id);
     }
+
     await query('DELETE FROM products WHERE id = $1', [productId]);
     res.json({ message: 'Product deleted' });
   } catch (err) {
@@ -260,7 +303,12 @@ const saveAsTemplate = async (req, res) => {
       [productId]
     );
 
+    if (stages.rows.length === 0) {
+      return res.status(400).json({ message: 'Product has no stages to save as template' });
+    }
+
     await client.query('BEGIN');
+
     const tmpl = await client.query(
       'INSERT INTO process_templates (workspace_id, name, description, created_by) VALUES ($1, $2, $3, $4) RETURNING *',
       [workspaceId, templateName, description || null, req.user.id]
@@ -284,4 +332,11 @@ const saveAsTemplate = async (req, res) => {
   }
 };
 
-module.exports = { getProducts, getProduct, createProduct, updateProduct, deleteProduct, saveAsTemplate };
+module.exports = {
+  getProducts,
+  getProduct,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  saveAsTemplate,
+};

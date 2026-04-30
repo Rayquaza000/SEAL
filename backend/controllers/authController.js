@@ -1,22 +1,20 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { query } = require('../config/db');
+const { uploadBuffer } = require('../config/cloudinary');
 
 const generateToken = (userId) =>
   jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 
-// POST /api/auth/register
 const register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
-    if (!name || !email || !password) {
+    if (!name || !email || !password)
       return res.status(400).json({ message: 'Name, email and password are required' });
-    }
 
     const existing = await query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
-    if (existing.rows.length > 0) {
+    if (existing.rows.length > 0)
       return res.status(409).json({ message: 'Email already registered' });
-    }
 
     const hashed = await bcrypt.hash(password, 12);
     const result = await query(
@@ -26,7 +24,6 @@ const register = async (req, res) => {
 
     const user = result.rows[0];
     const token = generateToken(user.id);
-
     res.status(201).json({ user, token });
   } catch (err) {
     console.error(err);
@@ -34,18 +31,15 @@ const register = async (req, res) => {
   }
 };
 
-// POST /api/auth/login
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
+    if (!email || !password)
       return res.status(400).json({ message: 'Email and password required' });
-    }
 
     const result = await query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
-    if (result.rows.length === 0) {
+    if (result.rows.length === 0)
       return res.status(401).json({ message: 'Invalid credentials' });
-    }
 
     const user = result.rows[0];
     const valid = await bcrypt.compare(password, user.password);
@@ -53,7 +47,6 @@ const login = async (req, res) => {
 
     const token = generateToken(user.id);
     const { password: _pw, ...safeUser } = user;
-
     res.json({ user: safeUser, token });
   } catch (err) {
     console.error(err);
@@ -61,10 +54,8 @@ const login = async (req, res) => {
   }
 };
 
-// GET /api/auth/me
 const getMe = async (req, res) => {
   try {
-    // Get all workspaces for user
     const workspaces = await query(
       `SELECT w.id, w.name, wm.role 
        FROM workspaces w 
@@ -73,7 +64,6 @@ const getMe = async (req, res) => {
        ORDER BY w.created_at DESC`,
       [req.user.id]
     );
-
     res.json({ user: req.user, workspaces: workspaces.rows });
   } catch (err) {
     console.error(err);
@@ -81,11 +71,17 @@ const getMe = async (req, res) => {
   }
 };
 
-// PUT /api/auth/profile - update name, avatar
 const updateProfile = async (req, res) => {
   try {
     const { name } = req.body;
-    const avatar_url = req.file?.path || null;
+    let avatar_url = null;
+
+    if (req.file) {
+      const uploaded = await uploadBuffer(req.file.buffer, 'seal/avatars', {
+        transformation: [{ width: 200, height: 200, crop: 'fill', gravity: 'face' }],
+      });
+      avatar_url = uploaded.url;
+    }
 
     let updateQuery, params;
     if (avatar_url) {
@@ -104,7 +100,6 @@ const updateProfile = async (req, res) => {
   }
 };
 
-// PUT /api/auth/change-password
 const changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
