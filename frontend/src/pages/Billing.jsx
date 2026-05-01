@@ -232,6 +232,155 @@ function BillDetailModal({ billId, workspaceId, onClose }) {
   );
 }
 
+/* ── Lumpsum Payment Modal ───────────────────── */
+function LumpsumModal({ totalPending, workspaceId, bills, onClose, onDone }) {
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // Sort pending/overdue bills oldest first so we pay off earliest bills first
+  const pendingBills = [...bills]
+    .filter(b => b.status === 'sent' || b.status === 'overdue')
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+  // Preview: which bills get fully/partially paid
+  const deductAmt = parseFloat(amount) || 0;
+  let remaining = deductAmt;
+  const preview = pendingBills.map(b => {
+    const billAmt = parseFloat(b.total_amount);
+    if (remaining <= 0) return { ...b, paid: 0, leftover: billAmt, fullyPaid: false };
+    if (remaining >= billAmt) {
+      remaining -= billAmt;
+      return { ...b, paid: billAmt, leftover: 0, fullyPaid: true };
+    }
+    const paid = remaining;
+    remaining = 0;
+    return { ...b, paid, leftover: billAmt - paid, fullyPaid: false };
+  });
+
+  const handleApply = async (e) => {
+    e.preventDefault();
+    if (deductAmt <= 0) return toast.error('Enter a valid amount');
+    if (deductAmt > parseFloat(totalPending || 0))
+      return toast.error('Amount exceeds total pending');
+
+    setLoading(true);
+    try {
+      // Mark fully-covered bills as paid, update partially-covered ones
+      for (const b of preview) {
+        if (b.paid <= 0) continue;
+        if (b.fullyPaid) {
+          await api.put(`/workspaces/${workspaceId}/bills/${b.id}`, {
+            status: 'paid',
+            notes: b.notes ? `${b.notes} | Lumpsum: ${note}` : `Lumpsum payment: ${note}`,
+          });
+        } else {
+          // Partial — add a note showing partial payment; don't mark as paid
+          await api.put(`/workspaces/${workspaceId}/bills/${b.id}`, {
+            notes: b.notes
+              ? `${b.notes} | Partial lumpsum ₹${b.paid.toLocaleString('en-IN')}: ${note}`
+              : `Partial lumpsum ₹${b.paid.toLocaleString('en-IN')}: ${note}`,
+          });
+        }
+      }
+      toast.success(`₹${deductAmt.toLocaleString('en-IN')} applied to pending bills`);
+      onDone();
+      onClose();
+    } catch { toast.error('Error applying payment'); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #eee' }}>
+          <div>
+            <p style={{ fontWeight: 700, fontSize: 16 }}>Lumpsum Payment</p>
+            <p style={{ fontSize: 13, color: '#999', marginTop: 2 }}>
+              Total pending: <strong style={{ color: '#1976d2' }}>₹{parseFloat(totalPending || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+            </p>
+          </div>
+          <button onClick={onClose}><X style={{ width: 18, height: 18, color: '#999' }} /></button>
+        </div>
+
+        <form onSubmit={handleApply} style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <label className="seal-label">Amount Received (₹) *</label>
+            <input
+              type="number" min="1" step="0.01" required
+              className="seal-input"
+              placeholder="e.g. 50000"
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              style={{ fontSize: 18, fontWeight: 700 }}
+            />
+          </div>
+
+          <div>
+            <label className="seal-label">Note / Reference (optional)</label>
+            <input className="seal-input" placeholder="e.g. UPI ref 123456" value={note}
+              onChange={e => setNote(e.target.value)} />
+          </div>
+
+          {/* Preview of how amount gets applied */}
+          {deductAmt > 0 && pendingBills.length > 0 && (
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 8 }}>
+                📋 Payment will be applied to these bills (oldest first):
+              </p>
+              <div style={{ border: '1px solid #e0e0e0', borderRadius: 8, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead style={{ background: '#f5f5f5' }}>
+                    <tr>
+                      {['Bill #', 'Client', 'Amount', 'Applied', 'Result'].map(h => (
+                        <th key={h} style={{ padding: '7px 10px', fontSize: 12, fontWeight: 600, color: '#777', textAlign: 'left' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.map(b => (
+                      <tr key={b.id} style={{
+                        borderTop: '1px solid #f0f0f0',
+                        background: b.fullyPaid ? '#f1f8e9' : b.paid > 0 ? '#fff8e1' : '#fff'
+                      }}>
+                        <td style={{ padding: '8px 10px', fontSize: 13, fontWeight: 600 }}>{b.bill_number}</td>
+                        <td style={{ padding: '8px 10px', fontSize: 13 }}>{b.client}</td>
+                        <td style={{ padding: '8px 10px', fontSize: 13 }}>₹{parseFloat(b.total_amount).toLocaleString('en-IN')}</td>
+                        <td style={{ padding: '8px 10px', fontSize: 13, fontWeight: 600, color: b.paid > 0 ? '#388e3c' : '#bbb' }}>
+                          {b.paid > 0 ? `₹${b.paid.toLocaleString('en-IN')}` : '—'}
+                        </td>
+                        <td style={{ padding: '8px 10px' }}>
+                          {b.fullyPaid
+                            ? <span className="status-paid">Paid ✓</span>
+                            : b.paid > 0
+                              ? <span className="status-pending">Partial</span>
+                              : <span style={{ fontSize: 12, color: '#bbb' }}>Unchanged</span>
+                          }
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {pendingBills.length === 0 && (
+            <p style={{ fontSize: 13, color: '#aaa', textAlign: 'center' }}>No pending bills to apply payment to.</p>
+          )}
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={onClose} className="btn-outline flex-1">Cancel</button>
+            <button type="submit" disabled={loading || pendingBills.length === 0} className="btn-black flex-1">
+              {loading ? 'Applying...' : 'Apply Payment'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function Billing() {
   const { activeWorkspace } = useAuth();
   const qc = useQueryClient();
@@ -240,6 +389,7 @@ export default function Billing() {
   const [showModal, setShowModal] = useState(false);
   const [editBill, setEditBill] = useState(null);
   const [viewBill, setViewBill] = useState(null);
+  const [showLumpsum, setShowLumpsum] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['bills', activeWorkspace?.id, search, statusFilter],
@@ -249,7 +399,14 @@ export default function Billing() {
     enabled: !!activeWorkspace?.id,
   });
 
-  const { data: summaryData } = useQuery({
+  // Fetch all bills (unfiltered) for lumpsum preview
+  const { data: allBillsData } = useQuery({
+    queryKey: ['bills-all', activeWorkspace?.id],
+    queryFn: () => api.get(`/workspaces/${activeWorkspace.id}/bills`).then(r => r.data),
+    enabled: !!activeWorkspace?.id,
+  });
+
+  const { data: summaryData, refetch: refetchSummary } = useQuery({
     queryKey: ['bills-summary', activeWorkspace?.id],
     queryFn: () => api.get(`/workspaces/${activeWorkspace.id}/bills/summary`).then(r => r.data),
     enabled: !!activeWorkspace?.id,
@@ -261,12 +418,20 @@ export default function Billing() {
       await api.delete(`/workspaces/${activeWorkspace.id}/bills/${bill.id}`);
       toast.success('Deleted');
       qc.invalidateQueries(['bills', activeWorkspace.id]);
+      qc.invalidateQueries(['bills-all', activeWorkspace.id]);
       qc.invalidateQueries(['bills-summary', activeWorkspace.id]);
     } catch { toast.error('Error'); }
   };
 
+  const handleLumpsumDone = () => {
+    qc.invalidateQueries(['bills', activeWorkspace.id]);
+    qc.invalidateQueries(['bills-all', activeWorkspace.id]);
+    qc.invalidateQueries(['bills-summary', activeWorkspace.id]);
+  };
+
   const { total_paid, total_pending, overdue_count } = summaryData?.summary || {};
   const bills = data?.bills || [];
+  const allBills = allBillsData?.bills || [];
 
   return (
     <div>
@@ -278,16 +443,41 @@ export default function Billing() {
 
       {/* Summary strip */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-        {[
-          { label: 'Total Paid', value: `₹${parseFloat(total_paid || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, color: '#4caf50' },
-          { label: 'Pending', value: `₹${parseFloat(total_pending || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, color: '#1976d2' },
-          { label: 'Overdue', value: overdue_count || 0, color: '#e53935' },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="seal-card" style={{ flex: 1, borderRadius: 12 }}>
-            <p style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>{label}</p>
-            <p style={{ fontSize: 20, fontWeight: 800, color }}>{value}</p>
+        {/* Total Paid */}
+        <div className="seal-card" style={{ flex: 1, borderRadius: 12 }}>
+          <p style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>Total Paid</p>
+          <p style={{ fontSize: 20, fontWeight: 800, color: '#4caf50' }}>
+            ₹{parseFloat(total_paid || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+          </p>
+        </div>
+
+        {/* Pending — with Deduct button */}
+        <div className="seal-card" style={{ flex: 1, borderRadius: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <p style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>Pending</p>
+              <p style={{ fontSize: 20, fontWeight: 800, color: '#1976d2' }}>
+                ₹{parseFloat(total_pending || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowLumpsum(true)}
+              style={{
+                background: '#e3f2fd', border: '1px solid #90caf9', borderRadius: 8,
+                padding: '4px 10px', fontSize: 11, fontWeight: 700, color: '#1565c0',
+                cursor: 'pointer', marginTop: 2
+              }}
+            >
+              + Deduct
+            </button>
           </div>
-        ))}
+        </div>
+
+        {/* Overdue */}
+        <div className="seal-card" style={{ flex: 1, borderRadius: 12 }}>
+          <p style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>Overdue</p>
+          <p style={{ fontSize: 20, fontWeight: 800, color: '#e53935' }}>{overdue_count || 0}</p>
+        </div>
       </div>
 
       {/* Filters */}
@@ -353,6 +543,15 @@ export default function Billing() {
       {showModal && <BillModal workspaceId={activeWorkspace.id} onClose={() => setShowModal(false)} />}
       {editBill && <BillModal bill={editBill} workspaceId={activeWorkspace.id} onClose={() => setEditBill(null)} />}
       {viewBill && <BillDetailModal billId={viewBill} workspaceId={activeWorkspace.id} onClose={() => setViewBill(null)} />}
+      {showLumpsum && (
+        <LumpsumModal
+          totalPending={total_pending}
+          workspaceId={activeWorkspace.id}
+          bills={allBills}
+          onClose={() => setShowLumpsum(false)}
+          onDone={handleLumpsumDone}
+        />
+      )}
     </div>
   );
 }

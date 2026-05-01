@@ -393,10 +393,15 @@ export default function Products() {
   const [selectedId, setSelectedId] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterClient, setFilterClient] = useState('');
+  const [filterEmployee, setFilterEmployee] = useState('');
 
   const { data: productsData, isLoading, refetch } = useQuery({
-    queryKey: ['products', activeWorkspace?.id, search],
-    queryFn: () => api.get(`/workspaces/${activeWorkspace.id}/products`, { params: { search } }).then(r => r.data),
+    queryKey: ['products', activeWorkspace?.id, search, filterStatus],
+    queryFn: () => api.get(`/workspaces/${activeWorkspace.id}/products`, {
+      params: { search, status: filterStatus },
+    }).then(r => r.data),
     enabled: !!activeWorkspace?.id,
   });
 
@@ -421,6 +426,16 @@ export default function Products() {
   const products = productsData?.products || [];
   const members = membersData?.members || [];
   const templates = templatesData?.templates || [];
+
+  // Derive unique clients from loaded products for the client filter dropdown
+  const uniqueClients = [...new Set(products.map(p => p.client).filter(Boolean))].sort();
+
+  // Apply client + employee filters client-side (search + status are server-side)
+  const filteredProducts = products.filter(p => {
+    if (filterClient && p.client !== filterClient) return false;
+    if (filterEmployee && String(p.assigned_to) !== filterEmployee) return false;
+    return true;
+  });
 
   const handleCreated = () => {
     setShowNew(false);
@@ -450,9 +465,11 @@ export default function Products() {
     <div style={{ display: 'flex', gap: 0, minHeight: 'calc(100vh - 140px)' }}>
 
       {/* ── LEFT: Product list ─────────────────── */}
-      <div style={{ width: 380, paddingRight: 16 }}>
+      <div style={{ width: 400, paddingRight: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <p className="text-base font-semibold text-gray-800">Products:</p>
+          <p className="text-base font-semibold text-gray-800">
+            Products: <span style={{ fontWeight: 400, fontSize: 13, color: '#aaa' }}>({filteredProducts.length})</span>
+          </p>
           {isOwner && (
             <button onClick={() => setShowNew(true)} className="btn-black text-xs px-3 py-1">
               + New Product
@@ -462,30 +479,85 @@ export default function Products() {
 
         {/* Search */}
         <input
-          className="seal-input mb-3"
-          placeholder="Search products..."
+          className="seal-input mb-2"
+          placeholder="Search by name, ID, client..."
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
+
+        {/* Filters row */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          {/* Status filter */}
+          <select
+            className="seal-select"
+            style={{ flex: 1, fontSize: 12 }}
+            value={filterStatus}
+            onChange={e => setFilterStatus(e.target.value)}
+          >
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="in_progress">In Progress</option>
+            <option value="completed">Completed</option>
+          </select>
+
+          {/* Client filter */}
+          <select
+            className="seal-select"
+            style={{ flex: 1, fontSize: 12 }}
+            value={filterClient}
+            onChange={e => setFilterClient(e.target.value)}
+          >
+            <option value="">All clients</option>
+            {uniqueClients.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+
+          {/* Employee filter */}
+          <select
+            className="seal-select"
+            style={{ flex: 1, fontSize: 12 }}
+            value={filterEmployee}
+            onChange={e => setFilterEmployee(e.target.value)}
+          >
+            <option value="">All employees</option>
+            <option value="null">Unassigned</option>
+            {members.map(m => (
+              <option key={m.id} value={String(m.id)}>{m.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Clear filters */}
+        {(filterStatus || filterClient || filterEmployee || search) && (
+          <button
+            onClick={() => { setSearch(''); setFilterStatus(''); setFilterClient(''); setFilterEmployee(''); }}
+            style={{ fontSize: 11, color: '#e57373', background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 8px 0', fontWeight: 600 }}
+          >
+            ✕ Clear all filters
+          </button>
+        )}
 
         <div className="seal-card p-0 overflow-hidden">
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#f5f5f5' }}>
-                {['Sr. No.', 'Product ID', 'Product'].map(h => (
-                  <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 13, fontWeight: 600, color: '#555', borderBottom: '1px solid #e0e0e0' }}>{h}</th>
+                {['Sr.', 'ID', 'Product', 'Status'].map(h => (
+                  <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#555', borderBottom: '1px solid #e0e0e0' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={3} style={{ padding: 20, textAlign: 'center' }}>
+                <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center' }}>
                   <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-red-400 mx-auto" />
                 </td></tr>
-              ) : products.length === 0 ? (
-                <tr><td colSpan={3} style={{ padding: 20, textAlign: 'center', color: '#999', fontSize: 13 }}>No products yet</td></tr>
+              ) : filteredProducts.length === 0 ? (
+                <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', color: '#999', fontSize: 13 }}>
+                  {products.length > 0 ? 'No products match filters' : 'No products yet'}
+                </td></tr>
               ) : (
-                products.map((p, i) => {
+                filteredProducts.map((p, i) => {
                   const isSelected = selectedId === p.id;
                   const bg = isSelected ? '#fecdd3' : i % 2 === 1 ? '#fef2f2' : '#fff';
                   return (
@@ -494,9 +566,18 @@ export default function Products() {
                       onClick={() => setSelectedId(p.id)}
                       style={{ background: bg, cursor: 'pointer', borderBottom: '1px solid #f0f0f0' }}
                     >
-                      <td style={{ padding: '10px 12px', fontSize: 14, color: '#666' }}>{i + 1}</td>
-                      <td style={{ padding: '10px 12px', fontSize: 14 }}>{p.product_code}</td>
-                      <td style={{ padding: '10px 12px', fontSize: 14, fontWeight: isSelected ? 700 : 400 }}>{p.name}</td>
+                      <td style={{ padding: '9px 10px', fontSize: 13, color: '#999' }}>{i + 1}</td>
+                      <td style={{ padding: '9px 10px', fontSize: 12, color: '#888' }}>{p.product_code}</td>
+                      <td style={{ padding: '9px 10px', fontSize: 13, fontWeight: isSelected ? 700 : 500 }}>
+                        <div>{p.name}</div>
+                        {p.client && <div style={{ fontSize: 11, color: '#aaa' }}>{p.client}</div>}
+                        {p.assigned_to_name && <div style={{ fontSize: 11, color: '#bbb' }}>👤 {p.assigned_to_name}</div>}
+                      </td>
+                      <td style={{ padding: '9px 10px' }}>
+                        <span className={`status-${p.status}`} style={{ fontSize: 10, padding: '2px 6px' }}>
+                          {p.status?.replace('_', ' ')}
+                        </span>
+                      </td>
                     </tr>
                   );
                 })

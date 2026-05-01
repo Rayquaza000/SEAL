@@ -88,8 +88,13 @@ export default function Dashboard() {
   return (
     <div style={{ display: 'flex', gap: 0, minHeight: 'calc(100vh - 140px)' }}>
 
-      {/* ── LEFT: Recent Products + Join Panel ────── */}
+      {/* ── LEFT: Join panel + Recent Products ────── */}
       <div style={{ flex: 1, paddingRight: 16 }}>
+
+        {/* ── Join another workspace (TOP) ────────── */}
+        <div style={{ marginBottom: 20 }}>
+          <JoinWorkspacePanel compact />
+        </div>
 
         {/* Join requests alert (owners only) */}
         {isOwner && (
@@ -110,7 +115,7 @@ export default function Dashboard() {
         ) : (
           <div style={{
             display: 'flex', flexDirection: 'column', gap: 10,
-            maxHeight: 'calc(100vh - 260px)', overflowY: 'auto', paddingRight: 4
+            maxHeight: 'calc(100vh - 380px)', overflowY: 'auto', paddingRight: 4
           }}>
             {products.map(p => {
               const pct = parseInt(p.progress) || 0;
@@ -133,11 +138,6 @@ export default function Dashboard() {
             })}
           </div>
         )}
-
-        {/* ── Join another workspace panel ────────── */}
-        <div style={{ marginTop: 24 }}>
-          <JoinWorkspacePanel compact />
-        </div>
       </div>
 
       {/* ── VERTICAL DIVIDER ──────────────────────── */}
