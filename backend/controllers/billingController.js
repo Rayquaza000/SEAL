@@ -107,30 +107,36 @@ const updateBill = async (req, res) => {
   const client = await getClient();
   try {
     const { billId } = req.params;
-    const { clientName, items, dueDate, notes, status } = req.body;
+    const { clientName, productId, items, dueDate, notes, status } = req.body;
 
     await client.query('BEGIN');
 
-    let setClauses = [];
-    let params = [];
+    const setClauses = [];
+    const params = [];
     let idx = 1;
 
-    if (clientName) { setClauses.push(`client = $${idx++}`); params.push(clientName); }
-    if (dueDate !== undefined) { setClauses.push(`due_date = $${idx++}`); params.push(dueDate); }
-    if (notes !== undefined) { setClauses.push(`notes = $${idx++}`); params.push(notes); }
-    if (status) { setClauses.push(`status = $${idx++}`); params.push(status); }
+    // Use clientName !== undefined so empty string also gets saved
+    if (clientName !== undefined) { setClauses.push(`client = $${idx++}`); params.push(clientName || null); }
+    if (productId !== undefined)  { setClauses.push(`product_id = $${idx++}`); params.push(productId || null); }
+    // Convert empty string to null so PostgreSQL DATE type doesn't crash
+    if (dueDate !== undefined)    { setClauses.push(`due_date = $${idx++}`); params.push(dueDate || null); }
+    if (notes !== undefined)      { setClauses.push(`notes = $${idx++}`); params.push(notes || null); }
+    if (status)                   { setClauses.push(`status = $${idx++}`); params.push(status); }
 
-    if (items) {
+    if (items !== undefined && items !== null) {
       const itemsArr = typeof items === 'string' ? JSON.parse(items) : items;
+
       await client.query('DELETE FROM bill_items WHERE bill_id = $1', [billId]);
 
       let totalAmount = 0;
       for (const item of itemsArr) {
-        const total = item.quantity * item.unitPrice;
+        const qty = parseFloat(item.quantity) || 0;
+        const price = parseFloat(item.unitPrice) || 0;
+        const total = qty * price;
         totalAmount += total;
         await client.query(
           'INSERT INTO bill_items (bill_id, description, quantity, unit_price, total) VALUES ($1, $2, $3, $4, $5)',
-          [billId, item.description, item.quantity, item.unitPrice, total]
+          [billId, item.description, qty, price, total]
         );
       }
       setClauses.push(`total_amount = $${idx++}`);
@@ -152,8 +158,8 @@ const updateBill = async (req, res) => {
     res.json({ bill: bill.rows[0], items: billItems.rows });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
+    console.error('updateBill error:', err);
+    res.status(500).json({ message: err.message || 'Server error' });
   } finally {
     client.release();
   }
