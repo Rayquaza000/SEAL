@@ -266,20 +266,25 @@ function LumpsumModal({ totalPending, workspaceId, bills, onClose, onDone }) {
 
     setLoading(true);
     try {
-      // Mark fully-covered bills as paid, update partially-covered ones
       for (const b of preview) {
         if (b.paid <= 0) continue;
+
         if (b.fullyPaid) {
+          // Mark fully covered bills as paid, store amount_paid = total_amount
           await api.put(`/workspaces/${workspaceId}/bills/${b.id}`, {
             status: 'paid',
-            notes: b.notes ? `${b.notes} | Lumpsum: ${note}` : `Lumpsum payment: ${note}`,
+            amountPaid: parseFloat(b.total_amount),
+            notes: b.notes
+              ? `${b.notes} | Lumpsum: ${note}`
+              : `Lumpsum payment${note ? ': ' + note : ''}`,
           });
         } else {
-          // Partial — add a note showing partial payment; don't mark as paid
+          // Store partial payment amount — this is what fixes the pending calculation
           await api.put(`/workspaces/${workspaceId}/bills/${b.id}`, {
+            amountPaid: parseFloat(b.paid),
             notes: b.notes
-              ? `${b.notes} | Partial lumpsum ₹${b.paid.toLocaleString('en-IN')}: ${note}`
-              : `Partial lumpsum ₹${b.paid.toLocaleString('en-IN')}: ${note}`,
+              ? `${b.notes} | Partial payment ₹${b.paid.toLocaleString('en-IN')}${note ? ': ' + note : ''}`
+              : `Partial payment ₹${b.paid.toLocaleString('en-IN')}${note ? ': ' + note : ''}`,
           });
         }
       }
@@ -498,43 +503,57 @@ export default function Billing() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f5f5f5' }}>
-              {['Sr.', 'Bill #', 'Client', 'Product', 'Amount', 'Due Date', 'Status', 'Actions'].map(h => (
-                <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 13, fontWeight: 600, color: '#555', borderBottom: '1px solid #e0e0e0' }}>{h}</th>
+              {['Sr.', 'Bill #', 'Client', 'Product', 'Total', 'Paid', 'Remaining', 'Due Date', 'Status', 'Actions'].map(h => (
+                <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#555', borderBottom: '1px solid #e0e0e0' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center' }}>
+              <tr><td colSpan={10} style={{ padding: 24, textAlign: 'center' }}>
                 <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-red-400 mx-auto" />
               </td></tr>
             ) : bills.length === 0 ? (
-              <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#aaa', fontSize: 13 }}>No bills yet</td></tr>
+              <tr><td colSpan={10} style={{ padding: 24, textAlign: 'center', color: '#aaa', fontSize: 13 }}>No bills yet</td></tr>
             ) : (
-              bills.map((bill, i) => (
-                <tr key={bill.id} style={{ background: i % 2 === 1 ? '#fef2f2' : '#fff', borderBottom: '1px solid #f0f0f0' }}>
-                  <td style={{ padding: '10px 14px', fontSize: 13, color: '#999' }}>{i + 1}</td>
-                  <td style={{ padding: '10px 14px', fontSize: 14, fontWeight: 600 }}>{bill.bill_number}</td>
-                  <td style={{ padding: '10px 14px', fontSize: 14 }}>{bill.client}</td>
-                  <td style={{ padding: '10px 14px', fontSize: 14, color: '#666' }}>{bill.product_name || '—'}</td>
-                  <td style={{ padding: '10px 14px', fontSize: 14, fontWeight: 600 }}>
-                    ₹{parseFloat(bill.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td style={{ padding: '10px 14px', fontSize: 14, color: '#666' }}>
-                    {bill.due_date ? new Date(bill.due_date).toLocaleDateString('en-IN') : '—'}
-                  </td>
-                  <td style={{ padding: '10px 14px' }}>
-                    <span className={`status-${bill.status}`}>{bill.status}</span>
-                  </td>
-                  <td style={{ padding: '10px 14px' }}>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => setViewBill(bill.id)} className="btn-outline text-xs px-2 py-1">View</button>
-                      <button onClick={() => setEditBill(bill)} className="btn-outline text-xs px-2 py-1">Edit</button>
-                      <button onClick={() => handleDelete(bill)} className="btn-outline text-xs px-2 py-1" style={{ color: '#e53935', borderColor: '#e53935' }}>Del</button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              bills.map((bill, i) => {
+                const total     = parseFloat(bill.total_amount || 0);
+                const paid      = bill.status === 'paid'
+                  ? total
+                  : parseFloat(bill.amount_paid || 0);
+                const remaining = Math.max(0, total - paid);
+
+                return (
+                  <tr key={bill.id} style={{ background: i % 2 === 1 ? '#fef2f2' : '#fff', borderBottom: '1px solid #f0f0f0' }}>
+                    <td style={{ padding: '10px 12px', fontSize: 13, color: '#999' }}>{i + 1}</td>
+                    <td style={{ padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>{bill.bill_number}</td>
+                    <td style={{ padding: '10px 12px', fontSize: 13 }}>{bill.client}</td>
+                    <td style={{ padding: '10px 12px', fontSize: 13, color: '#666' }}>{bill.product_name || '—'}</td>
+                    <td style={{ padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>
+                      ₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td style={{ padding: '10px 12px', fontSize: 13, fontWeight: 600, color: paid > 0 ? '#388e3c' : '#bbb' }}>
+                      {paid > 0 ? `₹${paid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                    </td>
+                    <td style={{ padding: '10px 12px', fontSize: 13, fontWeight: 600, color: remaining > 0 ? '#e53935' : '#388e3c' }}>
+                      {remaining > 0 ? `₹${remaining.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '✓ Cleared'}
+                    </td>
+                    <td style={{ padding: '10px 12px', fontSize: 13, color: '#666' }}>
+                      {bill.due_date ? new Date(bill.due_date).toLocaleDateString('en-IN') : '—'}
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <span className={`status-${bill.status}`}>{bill.status}</span>
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={() => setViewBill(bill.id)} className="btn-outline text-xs px-2 py-1">View</button>
+                        <button onClick={() => setEditBill(bill)} className="btn-outline text-xs px-2 py-1">Edit</button>
+                        <button onClick={() => handleDelete(bill)} className="btn-outline text-xs px-2 py-1" style={{ color: '#e53935', borderColor: '#e53935' }}>Del</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

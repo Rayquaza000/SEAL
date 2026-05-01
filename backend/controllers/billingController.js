@@ -8,7 +8,8 @@ const getBills = async (req, res) => {
 
     let q = `
       SELECT b.*, p.name AS product_name, p.product_code,
-             COUNT(bi.id) AS item_count
+             COUNT(bi.id) AS item_count,
+             COALESCE(b.amount_paid, 0) AS amount_paid
       FROM bills b
       LEFT JOIN products p ON p.id = b.product_id
       LEFT JOIN bill_items bi ON bi.bill_id = b.id
@@ -107,7 +108,7 @@ const updateBill = async (req, res) => {
   const client = await getClient();
   try {
     const { billId } = req.params;
-    const { clientName, productId, items, dueDate, notes, status } = req.body;
+    const { clientName, productId, items, dueDate, notes, status, amountPaid } = req.body;
 
     await client.query('BEGIN');
 
@@ -115,22 +116,21 @@ const updateBill = async (req, res) => {
     const params = [];
     let idx = 1;
 
-    // Use clientName !== undefined so empty string also gets saved
-    if (clientName !== undefined) { setClauses.push(`client = $${idx++}`); params.push(clientName || null); }
+    if (clientName !== undefined) { setClauses.push(`client = $${idx++}`);     params.push(clientName || null); }
     if (productId !== undefined)  { setClauses.push(`product_id = $${idx++}`); params.push(productId || null); }
-    // Convert empty string to null so PostgreSQL DATE type doesn't crash
-    if (dueDate !== undefined)    { setClauses.push(`due_date = $${idx++}`); params.push(dueDate || null); }
-    if (notes !== undefined)      { setClauses.push(`notes = $${idx++}`); params.push(notes || null); }
-    if (status)                   { setClauses.push(`status = $${idx++}`); params.push(status); }
+    if (dueDate !== undefined)    { setClauses.push(`due_date = $${idx++}`);   params.push(dueDate || null); }
+    if (notes !== undefined)      { setClauses.push(`notes = $${idx++}`);      params.push(notes || null); }
+    if (status)                   { setClauses.push(`status = $${idx++}`);     params.push(status); }
+    // Track partial / full payments from lumpsum
+    if (amountPaid !== undefined) { setClauses.push(`amount_paid = $${idx++}`); params.push(parseFloat(amountPaid) || 0); }
 
     if (items !== undefined && items !== null) {
       const itemsArr = typeof items === 'string' ? JSON.parse(items) : items;
-
       await client.query('DELETE FROM bill_items WHERE bill_id = $1', [billId]);
 
       let totalAmount = 0;
       for (const item of itemsArr) {
-        const qty = parseFloat(item.quantity) || 0;
+        const qty   = parseFloat(item.quantity)  || 0;
         const price = parseFloat(item.unitPrice) || 0;
         const total = qty * price;
         totalAmount += total;
@@ -153,7 +153,7 @@ const updateBill = async (req, res) => {
 
     await client.query('COMMIT');
 
-    const bill = await query('SELECT * FROM bills WHERE id = $1', [billId]);
+    const bill      = await query('SELECT * FROM bills WHERE id = $1', [billId]);
     const billItems = await query('SELECT * FROM bill_items WHERE bill_id = $1', [billId]);
     res.json({ bill: bill.rows[0], items: billItems.rows });
   } catch (err) {
@@ -181,10 +181,14 @@ const getBillingSummary = async (req, res) => {
   try {
     const { workspaceId } = req.params;
     const result = await query(
-      `SELECT 
+      `SELECT
         COUNT(*) AS total_bills,
-        SUM(CASE WHEN status = 'paid' THEN total_amount ELSE 0 END) AS total_paid,
-        SUM(CASE WHEN status = 'sent' OR status = 'overdue' THEN total_amount ELSE 0 END) AS total_pending,
+        -- Paid: fully paid bills + partial amounts already received
+        SUM(CASE WHEN status = 'paid' THEN total_amount
+                 ELSE COALESCE(amount_paid, 0) END) AS total_paid,
+        -- Pending: remaining unpaid amount on all non-paid bills
+        SUM(CASE WHEN status != 'paid' THEN total_amount - COALESCE(amount_paid, 0)
+                 ELSE 0 END) AS total_pending,
         COUNT(CASE WHEN status = 'overdue' THEN 1 END) AS overdue_count
        FROM bills WHERE workspace_id = $1`,
       [workspaceId]

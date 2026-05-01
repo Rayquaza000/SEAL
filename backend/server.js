@@ -42,6 +42,10 @@ const initDB = async () => {
   try {
     const schema = fs.readFileSync(path.join(__dirname, 'db', 'schema.sql'), 'utf8');
     await query(schema);
+    // Migration: add amount_paid column if it doesn't exist (safe for existing DBs)
+    await query(`
+      ALTER TABLE bills ADD COLUMN IF NOT EXISTS amount_paid DECIMAL(10,2) DEFAULT 0
+    `);
     console.log('✅ Database schema initialized');
   } catch (err) {
     console.error('❌ DB init error:', err.message);
