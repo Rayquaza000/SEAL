@@ -78,14 +78,25 @@ export default function Dashboard() {
   const { activeWorkspace, isOwner } = useAuth();
   const qc = useQueryClient();
 
+  const [productSearch, setProductSearch] = useState('');
+  const [productStatus, setProductStatus] = useState('');
+
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard', activeWorkspace?.id],
     queryFn: () => api.get(`/workspaces/${activeWorkspace.id}`).then(r => r.data),
     enabled: !!activeWorkspace?.id,
   });
 
+  const productsQuery = useQuery({
+    queryKey: ['dashboard-products', activeWorkspace?.id, productSearch, productStatus],
+    queryFn: () => api.get(`/workspaces/${activeWorkspace.id}/products`, {
+      params: { search: productSearch || undefined, status: productStatus || undefined },
+    }).then(r => r.data),
+    enabled: !!activeWorkspace?.id,
+  });
+
   const stats = data?.stats || {};
-  const products = data?.recentProducts || [];
+  const products = productsQuery.data?.products || data?.recentProducts || [];
 
   return (
     <div style={{ display: 'flex', gap: 0, minHeight: 'calc(100vh - 140px)' }}>
