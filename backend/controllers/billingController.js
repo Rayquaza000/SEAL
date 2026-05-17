@@ -200,15 +200,18 @@ const getBillingSummary = async (req, res) => {
   }
 };
 
-// PAYMENT HANDLERS (stubs)
-// The application currently tracks payments by updating `bills.amount_paid`.
-// These endpoints are provided as lightweight stubs to avoid startup errors
-// when routes are mounted. They can be expanded to use a dedicated
-// `payments` table in future if desired.
 const getPayments = async (req, res) => {
   try {
-    // No payments table present in schema; return empty list
-    res.json({ payments: [] });
+    const { workspaceId } = req.params;
+    const result = await query(
+      `SELECT p.*, u.name AS created_by_name
+       FROM payments p
+       LEFT JOIN users u ON u.id = p.created_by
+       WHERE p.workspace_id = $1
+       ORDER BY p.created_at DESC`,
+      [workspaceId]
+    );
+    res.json({ payments: result.rows });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
@@ -217,9 +220,20 @@ const getPayments = async (req, res) => {
 
 const recordPayment = async (req, res) => {
   try {
-    // For now, lumpsum/partial payments are applied by updating bills (see frontend logic).
-    // Return 501 to indicate this endpoint isn't implemented yet.
-    res.status(501).json({ message: 'recordPayment not implemented. Use bill updates instead.' });
+    const { workspaceId } = req.params;
+    const { amount, note } = req.body;
+
+    if (!amount || parseFloat(amount) <= 0) {
+      return res.status(400).json({ message: 'Valid payment amount required' });
+    }
+
+    const result = await query(
+      `INSERT INTO payments (workspace_id, amount, note, created_by)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [workspaceId, parseFloat(amount), note || null, req.user.id]
+    );
+
+    res.status(201).json({ payment: result.rows[0] });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
@@ -228,7 +242,8 @@ const recordPayment = async (req, res) => {
 
 const deletePayment = async (req, res) => {
   try {
-    res.status(501).json({ message: 'deletePayment not implemented.' });
+    await query('DELETE FROM payments WHERE id = $1', [req.params.paymentId]);
+    res.json({ message: 'Payment record deleted' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });

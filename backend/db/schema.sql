@@ -127,6 +127,15 @@ CREATE TABLE IF NOT EXISTS bill_items (
   total DECIMAL(10,2)
 );
 
+CREATE TABLE IF NOT EXISTS payments (
+  id SERIAL PRIMARY KEY,
+  workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE,
+  amount DECIMAL(10,2) NOT NULL,
+  note TEXT,
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace ON workspace_members(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members(user_id);

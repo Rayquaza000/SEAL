@@ -288,6 +288,10 @@ function LumpsumModal({ totalPending, workspaceId, bills, onClose, onDone }) {
           });
         }
       }
+      await api.post(`/workspaces/${workspaceId}/payments`, {
+        amount: deductAmt,
+        note: note ? `Lumpsum payment: ${note}` : 'Lumpsum payment received',
+      });
       toast.success(`₹${deductAmt.toLocaleString('en-IN')} applied to pending bills`);
       onDone();
       onClose();
@@ -411,6 +415,12 @@ export default function Billing() {
     enabled: !!activeWorkspace?.id,
   });
 
+  const { data: paymentsData } = useQuery({
+    queryKey: ['payments', activeWorkspace?.id],
+    queryFn: () => api.get(`/workspaces/${activeWorkspace.id}/payments`).then(r => r.data),
+    enabled: !!activeWorkspace?.id,
+  });
+
   const { data: summaryData, refetch: refetchSummary } = useQuery({
     queryKey: ['bills-summary', activeWorkspace?.id],
     queryFn: () => api.get(`/workspaces/${activeWorkspace.id}/bills/summary`).then(r => r.data),
@@ -432,11 +442,13 @@ export default function Billing() {
     qc.invalidateQueries(['bills', activeWorkspace.id]);
     qc.invalidateQueries(['bills-all', activeWorkspace.id]);
     qc.invalidateQueries(['bills-summary', activeWorkspace.id]);
+    qc.invalidateQueries(['payments', activeWorkspace.id]);
   };
 
   const { total_paid, total_pending, overdue_count } = summaryData?.summary || {};
   const bills = data?.bills || [];
   const allBills = allBillsData?.bills || [];
+  const payments = paymentsData?.payments || [];
 
   return (
     <div>
@@ -557,6 +569,37 @@ export default function Billing() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div style={{ marginTop: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <p className="text-base font-semibold text-gray-800">Payment Records</p>
+        </div>
+        <div className="seal-card p-0 overflow-hidden">
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f5f5f5' }}>
+                {['Date', 'Amount', 'Notes', 'Received by'].map(h => (
+                  <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#555', borderBottom: '1px solid #e0e0e0' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {payments.length === 0 ? (
+                <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', color: '#999', fontSize: 13 }}>No payment records yet</td></tr>
+              ) : (
+                payments.map(payment => (
+                  <tr key={payment.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                    <td style={{ padding: '10px 12px', fontSize: 13 }}>{new Date(payment.created_at).toLocaleString('en-IN')}</td>
+                    <td style={{ padding: '10px 12px', fontSize: 13, fontWeight: 700 }}>₹{parseFloat(payment.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td style={{ padding: '10px 12px', fontSize: 13 }}>{payment.note || '—'}</td>
+                    <td style={{ padding: '10px 12px', fontSize: 13 }}>{payment.created_by_name || '—'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {showModal && <BillModal workspaceId={activeWorkspace.id} onClose={() => setShowModal(false)} />}

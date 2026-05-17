@@ -180,6 +180,18 @@ export default function Layout() {
                     {item.label}
                   </button>
                 ))}
+                {isOwner && (
+                  <button
+                    onClick={() => {
+                      setDeleteConfirm(true);
+                      setMenuOpen(false);
+                    }}
+                    className="w-full text-left px-5 py-3 text-sm hover:bg-red-50 transition-colors"
+                    style={{ color: '#e53935', fontWeight: 700 }}
+                  >
+                    Delete workspace
+                  </button>
+                )}
               </div>
             )}
           </div>

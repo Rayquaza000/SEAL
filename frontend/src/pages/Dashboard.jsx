@@ -106,9 +106,31 @@ export default function Dashboard() {
           />
         )}
 
-        <p className="text-base font-semibold text-gray-800 mb-4">Recent Products:</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 16 }}>
+          <p className="text-base font-semibold text-gray-800" style={{ marginBottom: 0 }}>Recent Products:</p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input
+              className="seal-input"
+              placeholder="Search products..."
+              value={productSearch}
+              onChange={e => setProductSearch(e.target.value)}
+              style={{ minWidth: 180, fontSize: 13 }}
+            />
+            <select
+              className="seal-select"
+              value={productStatus}
+              onChange={e => setProductStatus(e.target.value)}
+              style={{ minWidth: 160, fontSize: 13 }}
+            >
+              <option value="">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+        </div>
 
-        {isLoading ? (
+        {productsQuery.isLoading ? (
           <div className="flex justify-center py-10">
             <div className="animate-spin rounded-full h-7 w-7 border-t-2" style={{ borderColor: '#e57373' }} />
           </div>
