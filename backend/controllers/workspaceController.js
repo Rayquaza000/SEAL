@@ -343,4 +343,17 @@ module.exports = {
   searchWorkspaces,
   removeMember,
   updateMemberRole,
+  deleteWorkspace,
 };
+
+// DELETE /api/workspaces/:workspaceId
+async function deleteWorkspace(req, res) {
+  try {
+    const { workspaceId } = req.params;
+    await query('DELETE FROM workspaces WHERE id = $1', [workspaceId]);
+    res.json({ message: 'Workspace deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+}

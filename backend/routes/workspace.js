@@ -48,6 +48,11 @@ router.post('/:workspaceId/bills', requireOwner, billCtrl.createBill);
 router.put('/:workspaceId/bills/:billId', requireOwner, billCtrl.updateBill);
 router.delete('/:workspaceId/bills/:billId', requireOwner, billCtrl.deleteBill);
 
+// ─── PAYMENTS (lumpsum) ───────────────────────────────────────────────────────
+router.get('/:workspaceId/payments', requireOwner, billCtrl.getPayments);
+router.post('/:workspaceId/payments', requireOwner, billCtrl.recordPayment);
+router.delete('/:workspaceId/payments/:paymentId', requireOwner, billCtrl.deletePayment);
+
 // ─── EMPLOYEES ────────────────────────────────────────────────────────────────
 router.get('/:workspaceId/employees', requireOwner, empCtrl.getEmployees);
 router.get('/:workspaceId/employees/:userId', requireOwner, empCtrl.getEmployeeDetails);

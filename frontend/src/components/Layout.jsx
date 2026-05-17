@@ -16,12 +16,13 @@ const NAV_ITEMS = [
 ];
 
 export default function Layout() {
-  const { user, workspaces, activeWorkspace, isOwner, switchWorkspace, logout, addWorkspace } = useAuth();
+  const { user, workspaces, activeWorkspace, isOwner, switchWorkspace, logout, addWorkspace, removeWorkspace } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [creatingWs, setCreatingWs] = useState(false);
   const [newWsName, setNewWsName] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -46,6 +47,19 @@ export default function Layout() {
       toast.success('Workspace created!');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Error');
+    }
+  };
+
+  const handleDeleteWorkspace = async () => {
+    if (!activeWorkspace) return;
+    try {
+      await api.delete(`/workspaces/${activeWorkspace.id}`);
+      removeWorkspace(activeWorkspace.id);
+      setDeleteConfirm(false);
+      navigate('/dashboard');
+      toast.success('Workspace deleted');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Error deleting workspace');
     }
   };
 
@@ -102,14 +116,29 @@ export default function Layout() {
 
         {/* Workspace pills */}
         {workspaces.map(ws => (
-          <button
-            key={ws.id}
-            onClick={() => { switchWorkspace(ws); navigate('/dashboard'); }}
-            className="pill-ws"
-            style={ws.id === activeWorkspace?.id ? { background: '#c8c4be', fontWeight: 700 } : {}}
-          >
-            {ws.name}
-          </button>
+          <div key={ws.id} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <button
+              onClick={() => { switchWorkspace(ws); navigate('/dashboard'); }}
+              className="pill-ws"
+              style={ws.id === activeWorkspace?.id ? { background: '#c8c4be', fontWeight: 700 } : {}}
+            >
+              {ws.name}
+            </button>
+            {/* Delete icon — only on active workspace, only for owners */}
+            {ws.id === activeWorkspace?.id && isOwner && (
+              <button
+                onClick={() => setDeleteConfirm(true)}
+                title="Delete workspace"
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: '#ccc', fontSize: 13, padding: '2px 4px',
+                  lineHeight: 1
+                }}
+              >
+                🗑
+              </button>
+            )}
+          </div>
         ))}
 
         {/* +New workspace pill */}
@@ -162,6 +191,30 @@ export default function Layout() {
         <span className="pill-user">{user?.name}</span>
         <span className="pill-user capitalize">{activeWorkspace?.role || '—'}</span>
       </footer>
+
+      {/* ── DELETE WORKSPACE CONFIRM ─────────────── */}
+      {deleteConfirm && (
+        <div className="modal-overlay">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <p style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Delete Workspace?</p>
+            <p style={{ fontSize: 14, color: '#666', marginBottom: 6 }}>
+              You are about to delete <strong>{activeWorkspace?.name}</strong>.
+            </p>
+            <p style={{ fontSize: 13, color: '#e53935', marginBottom: 20 }}>
+              ⚠️ This will permanently delete all products, stages, inventory, bills, and members. This cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setDeleteConfirm(false)} className="btn-outline flex-1">Cancel</button>
+              <button
+                onClick={handleDeleteWorkspace}
+                style={{ flex: 1, background: '#e53935', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: 'pointer', padding: '10px' }}
+              >
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

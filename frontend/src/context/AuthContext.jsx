@@ -66,12 +66,22 @@ export const AuthProvider = ({ children }) => {
     switchWorkspace(workspace);
   };
 
+  const removeWorkspace = (workspaceId) => {
+    const remaining = workspaces.filter(w => w.id !== workspaceId);
+    setWorkspaces(remaining);
+    if (activeWorkspace?.id === workspaceId) {
+      setActiveWorkspace(remaining[0] || null);
+      if (remaining[0]) localStorage.setItem('seal_active_workspace', remaining[0].id);
+      else localStorage.removeItem('seal_active_workspace');
+    }
+  };
+
   const isOwner = activeWorkspace?.role === 'owner';
 
   return (
     <AuthContext.Provider value={{
       user, workspaces, activeWorkspace, loading,
-      login, register, logout, switchWorkspace, addWorkspace,
+      login, register, logout, switchWorkspace, addWorkspace, removeWorkspace,
       isOwner, fetchMe,
     }}>
       {children}

@@ -11,6 +11,7 @@ router.post('/join-request', ctrl.requestToJoin);
 router.post('/accept-invite/:token', ctrl.acceptInvite);
 
 router.get('/:workspaceId', requireMember, ctrl.getWorkspace);
+router.delete('/:workspaceId', requireOwner, ctrl.deleteWorkspace);
 router.post('/:workspaceId/invite', requireOwner, ctrl.inviteEmployee);
 router.get('/:workspaceId/join-requests', requireOwner, ctrl.getJoinRequests);
 router.put('/:workspaceId/join-requests/:requestId', requireOwner, ctrl.handleJoinRequest);
