@@ -80,6 +80,8 @@ export default function Dashboard() {
 
   const [productSearch, setProductSearch] = useState('');
   const [productStatus, setProductStatus] = useState('');
+  const [productClient, setProductClient] = useState('');
+  const [productEmployee, setProductEmployee] = useState('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard', activeWorkspace?.id],
@@ -87,16 +89,28 @@ export default function Dashboard() {
     enabled: !!activeWorkspace?.id,
   });
 
-  const productsQuery = useQuery({
-    queryKey: ['dashboard-products', activeWorkspace?.id, productSearch, productStatus],
+  const membersQuery = useQuery({
+    queryKey: ['dashboard-members', activeWorkspace?.id],
+    queryFn: () => api.get(`/workspaces/${activeWorkspace.id}/employees`).then(r => r.data),
+    enabled: !!activeWorkspace?.id,
+  });
+
+  const productsQueryWithFilters = useQuery({
+    queryKey: ['dashboard-products', activeWorkspace?.id, productSearch, productStatus, productClient, productEmployee],
     queryFn: () => api.get(`/workspaces/${activeWorkspace.id}/products`, {
-      params: { search: productSearch || undefined, status: productStatus || undefined },
+      params: {
+        search: productSearch || productClient || undefined,
+        status: productStatus || undefined,
+        assignedTo: productEmployee || undefined,
+      },
     }).then(r => r.data),
     enabled: !!activeWorkspace?.id,
   });
 
   const stats = data?.stats || {};
-  const products = productsQuery.data?.products || data?.recentProducts || [];
+  const products = productsQueryWithFilters.data?.products || data?.recentProducts || [];
+  const members = membersQuery.data?.members || [];
+  const uniqueClients = [...new Set((products || []).map(p => p.client).filter(Boolean))].sort();
 
   return (
     <div style={{ display: 'flex', gap: 0, minHeight: 'calc(100vh - 140px)' }}>
@@ -125,23 +139,45 @@ export default function Dashboard() {
               placeholder="Search products..."
               value={productSearch}
               onChange={e => setProductSearch(e.target.value)}
-              style={{ minWidth: 180, fontSize: 13 }}
+              style={{ minWidth: 160, fontSize: 13 }}
             />
+
             <select
               className="seal-select"
               value={productStatus}
               onChange={e => setProductStatus(e.target.value)}
-              style={{ minWidth: 160, fontSize: 13 }}
+              style={{ minWidth: 140, fontSize: 13 }}
             >
               <option value="">All statuses</option>
               <option value="pending">Pending</option>
               <option value="in_progress">In Progress</option>
               <option value="completed">Completed</option>
             </select>
+
+            <select
+              className="seal-select"
+              value={productClient}
+              onChange={e => setProductClient(e.target.value)}
+              style={{ minWidth: 160, fontSize: 13 }}
+            >
+              <option value="">All clients</option>
+              {uniqueClients.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+
+            <select
+              className="seal-select"
+              value={productEmployee}
+              onChange={e => setProductEmployee(e.target.value)}
+              style={{ minWidth: 160, fontSize: 13 }}
+            >
+              <option value="">All employees</option>
+              <option value="null">Unassigned</option>
+              {members.map(m => <option key={m.id} value={String(m.id)}>{m.name}</option>)}
+            </select>
           </div>
         </div>
 
-        {productsQuery.isLoading ? (
+        {productsQueryWithFilters.isLoading ? (
           <div className="flex justify-center py-10">
             <div className="animate-spin rounded-full h-7 w-7 border-t-2" style={{ borderColor: '#e57373' }} />
           </div>
