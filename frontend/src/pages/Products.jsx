@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
@@ -390,7 +391,9 @@ function DetailPanel({ product, stages, materials, workspaceId, members, onUpdat
 export default function Products() {
   const { activeWorkspace, isOwner } = useAuth();
   const qc = useQueryClient();
-  const [selectedId, setSelectedId] = useState(null);
+  const navigate = useNavigate();
+  const { productId } = useParams();
+  const [selectedId, setSelectedId] = useState(productId || null);
   const [showNew, setShowNew] = useState(false);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -427,6 +430,10 @@ export default function Products() {
   const members = membersData?.members || [];
   const templates = templatesData?.templates || [];
 
+  useEffect(() => {
+    setSelectedId(productId || null);
+  }, [productId]);
+
   // Derive unique clients from loaded products for the client filter dropdown
   const uniqueClients = [...new Set(products.map(p => p.client).filter(Boolean))].sort();
 
@@ -445,6 +452,7 @@ export default function Products() {
 
   const handleDeleted = () => {
     setSelectedId(null);
+    navigate('/products');
     refetch();
     qc.invalidateQueries(['dashboard', activeWorkspace.id]);
   };
@@ -558,12 +566,15 @@ export default function Products() {
                 </td></tr>
               ) : (
                 filteredProducts.map((p, i) => {
-                  const isSelected = selectedId === p.id;
+                  const isSelected = selectedId === String(p.id);
                   const bg = isSelected ? '#fecdd3' : i % 2 === 1 ? '#fef2f2' : '#fff';
                   return (
                     <tr
                       key={p.id}
-                      onClick={() => setSelectedId(p.id)}
+                      onClick={() => {
+                        setSelectedId(String(p.id));
+                        navigate(`/products/${p.id}`);
+                      }}
                       style={{ background: bg, cursor: 'pointer', borderBottom: '1px solid #f0f0f0' }}
                     >
                       <td style={{ padding: '9px 10px', fontSize: 13, color: '#999' }}>{i + 1}</td>

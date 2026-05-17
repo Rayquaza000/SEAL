@@ -43,6 +43,7 @@ export default function App() {
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard"  element={<Dashboard />} />
             <Route path="products"   element={<Products />} />
+            <Route path="products/:productId" element={<Products />} />
             <Route path="my-tasks"   element={<MyTasks />} />
             <Route path="inventory"  element={<Inventory />} />
             <Route path="billing"    element={<Billing />} />

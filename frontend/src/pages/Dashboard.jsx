@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
@@ -73,6 +74,7 @@ function JoinRequestsAlert({ workspaceId, onApprove }) {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const { activeWorkspace, isOwner } = useAuth();
   const qc = useQueryClient();
 
@@ -120,7 +122,13 @@ export default function Dashboard() {
             {products.map(p => {
               const pct = parseInt(p.progress) || 0;
               return (
-                <div key={p.id} className="seal-card" style={{ borderRadius: 16 }}>
+                <div
+                  key={p.id}
+                  className="seal-card"
+                  onClick={() => navigate(`/products/${p.id}`)}
+                  style={{ borderRadius: 16, cursor: 'pointer' }}
+                  title="View product details"
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                     <div>
                       <p style={{ fontWeight: 700, fontSize: 16 }}>{p.name}</p>
