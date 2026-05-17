@@ -200,4 +200,39 @@ const getBillingSummary = async (req, res) => {
   }
 };
 
-module.exports = { getBills, getBill, createBill, updateBill, deleteBill, getBillingSummary };
+// PAYMENT HANDLERS (stubs)
+// The application currently tracks payments by updating `bills.amount_paid`.
+// These endpoints are provided as lightweight stubs to avoid startup errors
+// when routes are mounted. They can be expanded to use a dedicated
+// `payments` table in future if desired.
+const getPayments = async (req, res) => {
+  try {
+    // No payments table present in schema; return empty list
+    res.json({ payments: [] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+const recordPayment = async (req, res) => {
+  try {
+    // For now, lumpsum/partial payments are applied by updating bills (see frontend logic).
+    // Return 501 to indicate this endpoint isn't implemented yet.
+    res.status(501).json({ message: 'recordPayment not implemented. Use bill updates instead.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+const deletePayment = async (req, res) => {
+  try {
+    res.status(501).json({ message: 'deletePayment not implemented.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+module.exports = { getBills, getBill, createBill, updateBill, deleteBill, getBillingSummary, getPayments, recordPayment, deletePayment };
