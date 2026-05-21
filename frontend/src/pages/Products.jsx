@@ -348,7 +348,7 @@ function DetailPanel({ product, stages, materials, workspaceId, members, onUpdat
 
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
-            <button onClick={() => setEditing(true)} className="btn-yellow" style={{ background: '#ffe082', borderColor: '#ffe082', color: '#7c5c00' }}>Update Details</button>
+            <button onClick={() => setEditing(true)} className="btn-yellow" style={{ background: '#fff9c4', color: '#7c5c00' }}>Update Details</button>
             <button onClick={() => setShowTplModal(true)} className="btn-outline text-sm">Save as Template</button>
             <button onClick={handleDelete} className="btn-outline text-sm" style={{ color: '#e53935', borderColor: '#e53935' }}>Delete</button>
           </div>
