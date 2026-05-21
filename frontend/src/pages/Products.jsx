@@ -257,6 +257,8 @@ function DetailPanel({ product, stages, materials, workspaceId, members, onUpdat
     assignedTo: product.assigned_to || '',
     notes: product.notes || '',
   });
+  // Editable stages state for update
+  const [editStages, setEditStages] = useState(() => stages.map(s => ({ name: s.name, assignedTo: s.assigned_to || '' })));
   const [buildImage, setBuildImage] = useState(null);
   const [showTplModal, setShowTplModal] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -265,9 +267,16 @@ function DetailPanel({ product, stages, materials, workspaceId, members, onUpdat
     e.preventDefault();
     setLoading(true);
     try {
+      const validStages = editStages.filter(s => s.name.trim());
+      if (!validStages.length) {
+        toast.error('Add at least one stage');
+        setLoading(false);
+        return;
+      }
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => fd.append(k, v));
       if (buildImage) fd.append('buildImage', buildImage);
+      fd.append('stages', JSON.stringify(validStages));
       await api.put(`/workspaces/${workspaceId}/products/${product.id}`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
@@ -339,7 +348,7 @@ function DetailPanel({ product, stages, materials, workspaceId, members, onUpdat
 
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
-            <button onClick={() => setEditing(true)} className="btn-yellow">Update Details</button>
+            <button onClick={() => setEditing(true)} className="btn-yellow" style={{ background: '#ffe082', borderColor: '#ffe082', color: '#7c5c00' }}>Update Details</button>
             <button onClick={() => setShowTplModal(true)} className="btn-outline text-sm">Save as Template</button>
             <button onClick={handleDelete} className="btn-outline text-sm" style={{ color: '#e53935', borderColor: '#e53935' }}>Delete</button>
           </div>
@@ -373,7 +382,50 @@ function DetailPanel({ product, stages, materials, workspaceId, members, onUpdat
             <label className="seal-label">Notes</label>
             <textarea className="seal-input" rows={2} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+
+          {/* Editable stages */}
+          <div style={{ marginTop: 18 }}>
+            <label className="seal-label" style={{ fontWeight: 600, fontSize: 15 }}>Stages</label>
+            {editStages.map((stage, i) => (
+              <div key={i} style={{ marginBottom: 14 }}>
+                <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <label className="seal-label" style={{ minWidth: 90, marginBottom: 0 }}>Stage Name:</label>
+                  <input
+                    className="seal-input flex-1"
+                    value={stage.name}
+                    onChange={e => { const s = [...editStages]; s[i].name = e.target.value; setEditStages(s); }}
+                    placeholder={`Stage ${i + 1}`}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <label className="seal-label" style={{ minWidth: 90, marginBottom: 0 }}>Assign to:</label>
+                  <select
+                    className="seal-select flex-1"
+                    value={stage.assignedTo}
+                    onChange={e => { const s = [...editStages]; s[i].assignedTo = e.target.value; setEditStages(s); }}
+                  >
+                    <option value="">Select Employee</option>
+                    {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                  {editStages.length > 1 && (
+                    <button type="button" onClick={() => setEditStages(editStages.filter((_, j) => j !== i))}
+                      style={{ color: '#aaa', fontSize: 16, marginLeft: 4 }}>✕</button>
+                  )}
+                </div>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={() => setEditStages([...editStages, { name: '', assignedTo: '' }])}
+                className="btn-outline"
+              >
+                + Add stage
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
             <button type="button" onClick={() => setEditing(false)} className="btn-outline flex-1">Cancel</button>
             <button type="submit" disabled={loading} className="btn-yellow flex-1">{loading ? 'Saving...' : 'Save'}</button>
           </div>

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import toast from 'react-hot-toast';
 import JoinWorkspacePanel from './JoinWorkspacePanel';
+import TrashIcon from './TrashIcon';
 
 const NAV_ITEMS = [
   { label: 'Dashboard',  path: '/dashboard' },
@@ -131,11 +132,10 @@ export default function Layout() {
                 title="Delete workspace"
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
-                  color: '#ccc', fontSize: 13, padding: '2px 4px',
-                  lineHeight: 1
+                  padding: '2px 4px', lineHeight: 1, display: 'flex', alignItems: 'center'
                 }}
               >
-                🗑
+                <TrashIcon size={18} color="#e57373" />
               </button>
             )}
           </div>
