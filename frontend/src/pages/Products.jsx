@@ -262,6 +262,21 @@ function DetailPanel({ product, stages, materials, workspaceId, members, onUpdat
   const [buildImage, setBuildImage] = useState(null);
   const [showTplModal, setShowTplModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { isOwner } = useAuth();
+  const [stageStatusLoading, setStageStatusLoading] = useState({});
+  // Handler to update stage status
+  const handleStageStatusChange = async (stageId, newStatus) => {
+    setStageStatusLoading(ls => ({ ...ls, [stageId]: true }));
+    try {
+      await api.put(`/workspaces/${workspaceId}/stages/${stageId}/status`, { status: newStatus });
+      toast.success('Stage status updated');
+      onUpdated();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Error updating stage');
+    } finally {
+      setStageStatusLoading(ls => ({ ...ls, [stageId]: false }));
+    }
+  };
 
   const handleUpdate = async (e) => {
     e.preventDefault();
@@ -339,7 +354,21 @@ function DetailPanel({ product, stages, materials, workspaceId, members, onUpdat
                   <span style={{ color: '#444' }}>#{s.stage_order} {s.name}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     {s.assigned_to_name && <span style={{ color: '#888', fontSize: 12 }}>{s.assigned_to_name}</span>}
-                    <span className={`status-${s.status}`}>{s.status?.replace('_', ' ')}</span>
+                    {isOwner ? (
+                      <select
+                        className={`seal-select status-${s.status}`}
+                        value={s.status}
+                        disabled={stageStatusLoading[s.id]}
+                        onChange={e => handleStageStatusChange(s.id, e.target.value)}
+                        style={{ minWidth: 110 }}
+                      >
+                        {STATUS_OPTS.map(opt => (
+                          <option key={opt} value={opt}>{opt.replace('_', ' ')}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className={`status-${s.status}`}>{s.status?.replace('_', ' ')}</span>
+                    )}
                   </div>
                 </div>
               ))}
