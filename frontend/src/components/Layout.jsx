@@ -115,31 +115,33 @@ export default function Layout() {
       <footer className="seal-bottombar">
         <span className="text-sm font-medium text-gray-600 mr-1 flex-shrink-0">Workspace:</span>
 
-        {/* Workspace pills */}
-        {workspaces.map(ws => (
-          <div key={ws.id} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <button
-              onClick={() => { switchWorkspace(ws); navigate('/dashboard'); }}
-              className="pill-ws"
-              style={ws.id === activeWorkspace?.id ? { background: '#c8c4be', fontWeight: 700 } : {}}
-            >
-              {ws.name}
-            </button>
-            {/* Delete icon — only on active workspace, only for owners */}
-            {ws.id === activeWorkspace?.id && isOwner && (
-              <button
-                onClick={() => setDeleteConfirm(true)}
-                title="Delete workspace"
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  padding: '2px 4px', lineHeight: 1, display: 'flex', alignItems: 'center'
-                }}
-              >
-                <TrashIcon size={18} color="#e57373" />
-              </button>
-            )}
-          </div>
-        ))}
+        {/* Workspace dropdown */}
+        <select
+          className="seal-select mr-2"
+          value={activeWorkspace?.id || ''}
+          onChange={e => {
+            const ws = workspaces.find(w => w.id === e.target.value);
+            if (ws) { switchWorkspace(ws); navigate('/dashboard'); }
+          }}
+          style={{ minWidth: 140, maxWidth: 220 }}
+        >
+          {workspaces.map(ws => (
+            <option key={ws.id} value={ws.id}>{ws.name}</option>
+          ))}
+        </select>
+        {/* Delete icon — only on active workspace, only for owners */}
+        {activeWorkspace && isOwner && (
+          <button
+            onClick={() => setDeleteConfirm(true)}
+            title="Delete workspace"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              padding: '2px 4px', lineHeight: 1, display: 'flex', alignItems: 'center'
+            }}
+          >
+            <TrashIcon size={18} color="#e57373" />
+          </button>
+        )}
 
         {/* +New workspace pill */}
         {creatingWs ? (
